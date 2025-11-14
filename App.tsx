@@ -6,7 +6,7 @@ import { loadInitialSlos } from './services/sloService';
 import InputPanel from './components/InputPanel';
 import { InfoIcon, BrandIcon, MenuIcon, CloseIcon, CheckCircleIcon } from './components/icons/MiscIcons';
 import { FileIcon } from './components/icons/FileIcon';
-import { exportAsPdf, exportAsDocx, formatFileName } from './services/exportService';
+import { exportAsPdf, exportAsDocx, formatFileName, exportMultipleLessonsAsDocx, exportMultipleLessonsAsPdf } from './services/exportService';
 import { Part } from '@google/genai';
 
 interface UnitsByGrade {
@@ -20,6 +20,8 @@ interface ContextPdf {
     file: File;
 }
 
+type ExportOption = 'individual' | 'byUnit' | 'byGrade' | 'all';
+
 // --- SloPanel Component ---
 interface SloPanelProps {
   unitsByGrade: UnitsByGrade;
@@ -30,9 +32,11 @@ interface SloPanelProps {
   isParsing: boolean;
   generationProgress: { current: number; total: number } | null;
   areFilesReady: boolean;
+  exportOption: ExportOption;
+  setExportOption: React.Dispatch<React.SetStateAction<ExportOption>>;
 }
 
-const SloPanel: React.FC<SloPanelProps> = ({ unitsByGrade, selectedSloUniqueIds, setSelectedSloUniqueIds, isLoading, onGenerate, isParsing, generationProgress, areFilesReady }) => {
+const SloPanel: React.FC<SloPanelProps> = ({ unitsByGrade, selectedSloUniqueIds, setSelectedSloUniqueIds, isLoading, onGenerate, isParsing, generationProgress, areFilesReady, exportOption, setExportOption }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredUnitsByGrade = useMemo(() => {
@@ -210,14 +214,41 @@ const SloPanel: React.FC<SloPanelProps> = ({ unitsByGrade, selectedSloUniqueIds,
               </div>
            </div>
         ) : (
-            <button 
-                onClick={onGenerate} 
-                disabled={isLoading || selectedSloUniqueIds.length === 0 || !areFilesReady}
-                className="w-full bg-brand-primary text-white font-bold py-2 px-4 rounded-lg hover:bg-brand-primary/90 transition-colors disabled:bg-brand-gray/50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22h6a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v5"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M4 12.1_8H.6a.6.6 0 0 0-.6.6v3.6a.6.6 0 0 0 .6.6h3.6a.6.6 0 0 0 .6-.6v-3.6a.6.6 0 0 0-.6-.6z"/><path d="M4 18.1_8H.6a.6.6 0 0 0-.6.6v3.6a.6.6 0 0 0 .6.6h3.6a.6.6 0 0 0 .6-.6v-3.6a.6.6 0 0 0-.6-.6z"/><path d="M10 12.1_8H6.6a.6.6 0 0 0-.6.6v3.6a.6.6 0 0 0 .6.6h3.6a.6.6 0 0 0 .6-.6v-3.6a.6.6 0 0 0-.6-.6z"/><path d="M10 18.1_8H6.6a.6.6 0 0 0-.6.6v3.6a.6.6 0 0 0 .6.6h3.6a.6.6 0 0 0 .6-.6v-3.6a.6.6 0 0 0-.6-.6z"/></svg>
-                Generate Lesson Plan{selectedSloUniqueIds.length > 1 ? 's' : ''} ({selectedSloUniqueIds.length})
-            </button>
+            <>
+                <div className="mb-4">
+                    <h4 className="text-sm font-semibold text-gray-300 mb-2">Export Options</h4>
+                    <div className="space-y-2 text-sm">
+                        {(['individual', 'byUnit', 'byGrade', 'all'] as ExportOption[]).map(option => (
+                            <label key={option} className="flex items-center gap-2 text-gray-400 cursor-pointer">
+                                <input 
+                                    type="radio"
+                                    name="export-option"
+                                    value={option}
+                                    checked={exportOption === option}
+                                    onChange={(e) => setExportOption(e.target.value as ExportOption)}
+                                    className="form-radio h-4 w-4 text-brand-primary bg-brand-dark border-brand-gray focus:ring-brand-primary/50"
+                                />
+                                {
+                                    {
+                                        individual: 'Individual Files (PDF + DOCX for each SLO)',
+                                        byUnit: 'Combine by Unit (One PDF & DOCX per Unit)',
+                                        byGrade: 'Combine by Grade (One PDF & DOCX per Grade)',
+                                        all: 'Combine All (One PDF & DOCX for all selected)'
+                                    }[option]
+                                }
+                            </label>
+                        ))}
+                    </div>
+                </div>
+                <button 
+                    onClick={onGenerate} 
+                    disabled={isLoading || selectedSloUniqueIds.length === 0 || !areFilesReady}
+                    className="w-full bg-brand-primary text-white font-bold py-2 px-4 rounded-lg hover:bg-brand-primary/90 transition-colors disabled:bg-brand-gray/50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22h6a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v5"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M4 12.1_8H.6a.6.6 0 0 0-.6.6v3.6a.6.6 0 0 0 .6.6h3.6a.6.6 0 0 0 .6-.6v-3.6a.6.6 0 0 0-.6-.6z"/><path d="M4 18.1_8H.6a.6.6 0 0 0-.6.6v3.6a.6.6 0 0 0 .6.6h3.6a.6.6 0 0 0 .6-.6v-3.6a.6.6 0 0 0-.6-.6z"/><path d="M10 12.1_8H6.6a.6.6 0 0 0-.6.6v3.6a.6.6 0 0 0 .6.6h3.6a.6.6 0 0 0 .6-.6v-3.6a.6.6 0 0 0-.6-.6z"/><path d="M10 18.1_8H6.6a.6.6 0 0 0-.6.6v3.6a.6.6 0 0 0 .6.6h3.6a.6.6 0 0 0 .6-.6v-3.6a.6.6 0 0 0-.6-.6z"/></svg>
+                    Generate Lesson Plan{selectedSloUniqueIds.length > 1 ? 's' : ''} ({selectedSloUniqueIds.length})
+                </button>
+            </>
         )}
         {!areFilesReady && hasSlos && <p className="text-xs text-red-400 text-center mt-2">Some context PDFs are missing. Please connect the correct folder.</p>}
       </div>
@@ -317,6 +348,7 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [logMessages, setLogMessages] = useState<string[]>([]);
   const [isComplete, setIsComplete] = useState<boolean>(false);
+  const [exportOption, setExportOption] = useState<ExportOption>('individual');
 
   const [directoryName, setDirectoryName] = useState<string | null>(null);
   const [directoryFiles, setDirectoryFiles] = useState<File[]>([]);
@@ -403,56 +435,124 @@ const App: React.FC = () => {
     setIsLoading(true);
     setIsComplete(false);
     setLogMessages(['Starting lesson plan generation...']);
-    setGenerationProgress({ current: 0, total: selectedSloUniqueIds.length });
-
     const selectedSlos = allSlos.filter(slo => selectedSloUniqueIds.includes(slo.uniqueId!));
 
-    for (let i = 0; i < selectedSlos.length; i++) {
-        const slo = selectedSlos[i];
-        setGenerationProgress({ current: i + 1, total: selectedSlos.length });
-        setLogMessages(prev => [...prev, `\nProcessing SLO: ${slo.SLO_ID}`]);
+    const processSlo = async (slo: SLO): Promise<LessonPlan | null> => {
+        const MAX_RETRIES = 1; // 1 initial try + 1 retry = 2 total attempts
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                if (attempt > 0) {
+                    setLogMessages(prev => [...prev, `Retrying generation for ${slo.SLO_ID}...`]);
+                }
+                const unitSlos = allSlos.filter(s => s.grade === slo.grade && s.Unit_Name === slo.Unit_Name);
+                const contextPdf = contextPdfs.find(p => p.grade === slo.grade && parseInt(p.unit, 10) === parseInt(slo.Unit_Number, 10));
+                
+                let contextFilePart: Part | undefined;
+                if (contextPdf) {
+                    if (attempt === 0) setLogMessages(prev => [...prev, `Found context file: ${contextPdf.name}`]);
+                    contextFilePart = await fileToPart(contextPdf.file);
+                } else {
+                    if (attempt === 0) {
+                        const warningMsg = `No context PDF found for SLO ${slo.SLO_ID}. Generation may be less accurate.`;
+                        console.warn(warningMsg);
+                        setLogMessages(prev => [...prev, `WARN: ${warningMsg}`]);
+                    }
+                }
+                
+                if (attempt === 0) setLogMessages(prev => [...prev, `Generating lesson plan content...`]);
+                const plan = await generateLessonPlan(slo, unitSlos, contextFilePart);
+                setLogMessages(prev => [...prev, `Content received for "${plan.title}"`]);
+                return plan;
+            } catch (error) {
+                const errorMsg = `Failed for ${slo.SLO_ID} (Attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${error instanceof Error ? error.message : String(error)}`;
+                console.error(errorMsg);
+                setLogMessages(prev => [...prev, `ERROR: ${errorMsg}`]);
+                if (attempt < MAX_RETRIES) {
+                    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s before retry
+                }
+            }
+        }
+        setLogMessages(prev => [...prev, `ERROR: Skipped ${slo.SLO_ID} after all attempts failed.`]);
+        return null;
+    };
 
-        try {
-            const unitSlos = allSlos.filter(s => s.grade === slo.grade && s.Unit_Name === slo.Unit_Name);
-            const contextPdf = contextPdfs.find(p => p.grade === slo.grade && parseInt(p.unit, 10) === parseInt(slo.Unit_Number, 10));
+    if (exportOption === 'individual') {
+        setGenerationProgress({ current: 0, total: selectedSlos.length });
+        for (let i = 0; i < selectedSlos.length; i++) {
+            const slo = selectedSlos[i];
+            setGenerationProgress({ current: i + 1, total: selectedSlos.length });
+            setLogMessages(prev => [...prev, `\nProcessing SLO: ${slo.SLO_ID}`]);
             
-            let contextFilePart: Part | undefined;
-            if (contextPdf) {
-                setLogMessages(prev => [...prev, `Found context file: ${contextPdf.name}`]);
-                contextFilePart = await fileToPart(contextPdf.file);
-            } else {
-                 const warningMsg = `No context PDF found for SLO ${slo.SLO_ID}. Generation may be less accurate.`;
-                 console.warn(warningMsg);
-                 setLogMessages(prev => [...prev, `WARN: ${warningMsg}`]);
+            const plan = await processSlo(slo);
+            if (plan) {
+                setLogMessages(prev => [...prev, `Exporting individual files...`]);
+                await exportAsDocx(plan, slo.SLO_ID);
+                await new Promise(resolve => setTimeout(resolve, 250));
+                await exportAsPdf(plan, slo.SLO_ID);
+                await new Promise(resolve => setTimeout(resolve, 250));
+            }
+        }
+    } else {
+        let groups: Map<string, SLO[]>;
+        switch (exportOption) {
+            case 'byUnit':
+                groups = selectedSlos.reduce((acc, current) => {
+                    const key = `${current.grade}_${current.Unit_Name}`;
+                    if (!acc.has(key)) acc.set(key, []);
+                    acc.get(key)!.push(current);
+                    return acc;
+                }, new Map());
+                break;
+            case 'byGrade':
+                groups = selectedSlos.reduce((acc, current) => {
+                    const key = current.grade!;
+                    if (!acc.has(key)) acc.set(key, []);
+                    acc.get(key)!.push(current);
+                    return acc;
+                }, new Map());
+                break;
+            case 'all':
+            default:
+                groups = new Map([['all_selected_plans', selectedSlos]]);
+                break;
+        }
+
+        setGenerationProgress({ current: 0, total: selectedSlos.length });
+        let processedCount = 0;
+
+        for (const [key, slosInGroup] of groups.entries()) {
+            if (slosInGroup.length === 0) continue;
+            
+            const groupName = key.replace(/_/g, ' ');
+            setLogMessages(prev => [...prev, `\n--- Starting group: ${groupName} ---`]);
+
+            const generatedPlansForGroup: LessonPlan[] = [];
+            for (const slo of slosInGroup) {
+                processedCount++;
+                setGenerationProgress({ current: processedCount, total: selectedSlos.length });
+                setLogMessages(prev => [...prev, `Processing SLO: ${slo.SLO_ID}`]);
+                const plan = await processSlo(slo);
+                if (plan) {
+                    generatedPlansForGroup.push(plan);
+                }
             }
             
-            setLogMessages(prev => [...prev, `Generating lesson plan content...`]);
-            const plan = await generateLessonPlan(slo, unitSlos, contextFilePart);
-            setLogMessages(prev => [...prev, `Content received. Title: "${plan.title}"`]);
-
-            // Sequentially export
-            const docxFileName = formatFileName(plan.title, slo.SLO_ID);
-            setLogMessages(prev => [...prev, `Exporting ${docxFileName}.docx...`]);
-            await exportAsDocx(plan, slo.SLO_ID);
-            await new Promise(resolve => setTimeout(resolve, 250));
-            
-            const pdfFileName = formatFileName(plan.title, slo.SLO_ID);
-            setLogMessages(prev => [...prev, `Exporting ${pdfFileName}.pdf...`]);
-            await exportAsPdf(plan, slo.SLO_ID);
-            await new Promise(resolve => setTimeout(resolve, 250));
-            
-            setLogMessages(prev => [...prev, `Successfully processed ${slo.SLO_ID}.`]);
-
-        } catch (error) {
-            const errorMsg = `Failed for ${slo.SLO_ID}: ${error instanceof Error ? error.message : String(error)}`;
-            console.error(errorMsg);
-            setLogMessages(prev => [...prev, `ERROR: ${errorMsg}`]);
+            if (generatedPlansForGroup.length > 0) {
+                const fileName = formatFileName(groupName);
+                setLogMessages(prev => [...prev, `Combining and exporting ${fileName}.pdf...`]);
+                await exportMultipleLessonsAsPdf(generatedPlansForGroup, fileName);
+                await new Promise(resolve => setTimeout(resolve, 250));
+                
+                setLogMessages(prev => [...prev, `Combining and exporting ${fileName}.docx...`]);
+                await exportMultipleLessonsAsDocx(generatedPlansForGroup, fileName);
+                await new Promise(resolve => setTimeout(resolve, 250));
+            }
         }
     }
     
     setIsLoading(false);
-    setGenerationProgress(null);
     setIsComplete(true);
+    setGenerationProgress(null);
     setLogMessages(prev => [...prev, `\nGeneration finished.`]);
   };
   
@@ -528,6 +628,8 @@ const App: React.FC = () => {
             isParsing={isParsing}
             generationProgress={generationProgress}
             areFilesReady={areFilesReady}
+            exportOption={exportOption}
+            setExportOption={setExportOption}
           />
           <StatusDisplay
             isLoading={isLoading}
