@@ -13,8 +13,6 @@ export interface LessonPlan {
   materials: string[];
   activities: Activity[];
   assessment: string;
-  homework: string;
-  summary: string;
 }
 
 export interface SLO {

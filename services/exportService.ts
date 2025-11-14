@@ -19,7 +19,7 @@ declare const pdfMake: any;
 
 // --- UTILITY FUNCTIONS ---
 
-const formatFileName = (title: string, sloId?: string): string => {
+export const formatFileName = (title: string, sloId?: string): string => {
   const baseName = sloId ? `${sloId}_${title}` : title;
   // Replace invalid characters for file names and limit length
   return baseName.replace(/[^a-z0-9_.-]/gi, '_').substring(0, 100);
@@ -168,9 +168,6 @@ export const exportAsDocx = async (lessonPlan: LessonPlan, sloId?: string): Prom
 
     const children: (Paragraph | Table)[] = [headerTable];
     
-    children.push(createSectionHeading('SUMMARY'));
-    children.push(createRichParagraph(lessonPlan.summary));
-
     children.push(createSectionHeading('RESOURCES'));
     if (lessonPlan.materials.length > 0) {
         children.push(...createBulletList(lessonPlan.materials));
@@ -261,9 +258,6 @@ export const exportAsPdf = async (lessonPlan: LessonPlan, sloId?: string): Promi
                 },
                 margin: [0, 0, 0, 10] 
             },
-
-            { text: 'SUMMARY', style: 'sectionHeader' },
-            createPdfRichText(lessonPlan.summary),
             
             { text: 'RESOURCES', style: 'sectionHeader' },
             { ul: lessonPlan.materials.length > 0 ? lessonPlan.materials.map(m => createPdfRichText(m)) : [{ text: 'No materials required.', style: 'body' }] },

@@ -1,12 +1,12 @@
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { SLO, GroupedSlos, LessonPlan } from './types';
 import { generateLessonPlan } from './services/geminiService';
 import { loadInitialSlos } from './services/sloService';
 import InputPanel from './components/InputPanel';
-import { InfoIcon, BrandIcon, MenuIcon, CloseIcon } from './components/icons/MiscIcons';
+import { InfoIcon, BrandIcon, MenuIcon, CloseIcon, CheckCircleIcon } from './components/icons/MiscIcons';
 import { FileIcon } from './components/icons/FileIcon';
-import { exportAsPdf, exportAsDocx } from './services/exportService';
+import { exportAsPdf, exportAsDocx, formatFileName } from './services/exportService';
 import { Part } from '@google/genai';
 
 interface UnitsByGrade {
@@ -226,38 +226,27 @@ const SloPanel: React.FC<SloPanelProps> = ({ unitsByGrade, selectedSloUniqueIds,
 };
 
 
-// --- LessonPlanDisplay Component ---
-interface LessonPlanDisplayProps {
-  lessonPlan: LessonPlan | null;
+// --- StatusDisplay Component ---
+interface StatusDisplayProps {
   isLoading: boolean;
-  initialMessage: string;
-  onExportPdf: () => void;
-  onExportDocx: () => void;
-  sloId: string | null;
+  isComplete: boolean;
+  logMessages: string[];
+  generationProgress: { current: number; total: number } | null;
 }
 
-const LessonPlanDisplay: React.FC<LessonPlanDisplayProps> = ({ lessonPlan, isLoading, initialMessage, onExportPdf, onExportDocx, sloId }) => {
-  if (isLoading && !lessonPlan) {
-    return (
-      <div className="flex-1 p-6 bg-brand-dark rounded-xl flex items-center justify-center">
-        <div className="text-center">
-          <svg className="animate-spin h-10 w-10 text-brand-primary mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <h3 className="font-semibold text-gray-300">Generating Lesson Plan...</h3>
-          <p className="text-sm text-brand-gray mt-1">AI is thinking, please wait.</p>
-        </div>
-      </div>
-    );
-  }
+const StatusDisplay: React.FC<StatusDisplayProps> = ({ isLoading, isComplete, logMessages, generationProgress }) => {
+  const logsEndRef = useRef<HTMLDivElement>(null);
 
-  if (!lessonPlan) {
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [logMessages]);
+
+  if (!isLoading && !isComplete) {
     return (
       <div className="flex-1 p-6 bg-[#1e1f22] rounded-xl flex items-center justify-center">
         <div className="text-center text-brand-gray">
           <BrandIcon className="w-16 h-16 text-brand-primary/30 mx-auto mb-4" />
-          <p>{initialMessage}</p>
+          <p>Select SLOs and click 'Generate' to download lesson plans.</p>
         </div>
       </div>
     );
@@ -265,50 +254,53 @@ const LessonPlanDisplay: React.FC<LessonPlanDisplayProps> = ({ lessonPlan, isLoa
 
   return (
     <div className="flex-1 p-6 bg-[#1e1f22] rounded-xl flex flex-col">
-       <div className="flex-shrink-0 mb-4 flex justify-between items-center">
-        <h2 className="text-xl font-bold text-gray-200">Generated Lesson Plan</h2>
-        <div className="flex gap-2">
-            <button onClick={onExportPdf} className="bg-red-600/80 hover:bg-red-600 text-white font-bold py-1.5 px-3 rounded-lg text-sm transition-colors">PDF</button>
-            <button onClick={onExportDocx} className="bg-blue-600/80 hover:bg-blue-600 text-white font-bold py-1.5 px-3 rounded-lg text-sm transition-colors">DOCX</button>
-        </div>
+      <div className="flex-shrink-0 mb-4 flex justify-between items-center">
+        <h2 className="text-xl font-bold text-gray-200">
+          {isComplete ? 'Generation Complete' : 'Generation in Progress'}
+        </h2>
       </div>
-      <div className="flex-grow overflow-y-auto custom-scrollbar -mr-2 pr-2">
-        <div className="bg-brand-dark p-4 rounded-md">
-            <h3 className="text-lg font-semibold text-brand-primary">{lessonPlan.title}</h3>
-            {sloId && <p className="font-mono text-xs bg-brand-gray/10 text-brand-gray px-2 py-1 rounded-md inline-block my-2">{sloId}</p>}
-            <p className="text-sm text-gray-400 mt-1 italic">{lessonPlan.summary}</p>
+
+      {isLoading && generationProgress && (
+        <div className="w-full text-center flex-shrink-0 mb-4">
+          <p className="text-sm text-brand-primary mb-2">Processing... ({generationProgress.current}/{generationProgress.total})</p>
+          <div className="w-full bg-brand-dark rounded-full h-2.5">
+            <div
+              className="bg-brand-primary h-2.5 rounded-full"
+              style={{ width: `${(generationProgress.current / generationProgress.total) * 100}%`, transition: 'width 0.3s ease-in-out' }}
+            ></div>
+          </div>
         </div>
-        
-        <div className="mt-4 space-y-4">
-            <div>
-                <h4 className="font-semibold text-gray-300 border-b border-brand-gray/20 pb-1 mb-2">Learning Objective</h4>
-                <p className="text-sm text-gray-400">{lessonPlan.objective}</p>
+      )}
+
+      <div className="flex-grow overflow-y-auto custom-scrollbar bg-brand-dark p-4 rounded-md min-h-0">
+        {logMessages.length > 0 ? (
+          logMessages.map((msg, index) => (
+            <div key={index} className="flex items-start text-sm font-mono">
+              <span className="text-brand-gray/80 mr-2">{`[${new Date().toLocaleTimeString()}]`}</span>
+              <p
+                className={`flex-1 ${
+                  msg.startsWith('ERROR') ? 'text-red-400' : msg.startsWith('Successfully') ? 'text-green-400' : 'text-gray-400'
+                } whitespace-pre-wrap break-words`}
+              >
+                {msg}
+              </p>
             </div>
-            <div>
-                <h4 className="font-semibold text-gray-300 border-b border-brand-gray/20 pb-1 mb-2">Materials</h4>
-                <ul className="list-disc list-inside text-sm text-gray-400 space-y-1">
-                    {lessonPlan.materials.map((item, index) => <li key={index}>{item}</li>)}
-                </ul>
-            </div>
-            <div>
-                <h4 className="font-semibold text-gray-300 border-b border-brand-gray/20 pb-1 mb-2">Activities</h4>
-                {lessonPlan.activities.map((activity, index) => (
-                    <div key={index} className="mt-2 p-3 bg-brand-dark/50 rounded-md">
-                        <p className="font-semibold text-brand-primary/90">{activity.name} <span className="text-xs text-gray-500">({activity.duration} mins)</span></p>
-                        <p className="text-sm text-gray-400 mt-1">{activity.description}</p>
-                    </div>
-                ))}
-            </div>
-             <div>
-                <h4 className="font-semibold text-gray-300 border-b border-brand-gray/20 pb-1 mb-2">Assessment</h4>
-                <p className="text-sm text-gray-400">{lessonPlan.assessment}</p>
-            </div>
-            <div>
-                <h4 className="font-semibold text-gray-300 border-b border-brand-gray/20 pb-1 mb-2">Homework</h4>
-                <p className="text-sm text-gray-400">{lessonPlan.homework}</p>
-            </div>
-        </div>
+          ))
+        ) : (
+          <p className="text-sm text-brand-gray">Waiting to start generation...</p>
+        )}
+        <div ref={logsEndRef} />
       </div>
+
+      {isComplete && (
+        <div className="mt-4 text-center p-4 bg-green-900/50 rounded-md border border-green-500/50 flex-shrink-0">
+            <div className="flex items-center justify-center gap-2">
+                <CheckCircleIcon className="w-5 h-5 text-green-300" />
+                <p className="font-semibold text-green-300">Success!</p>
+            </div>
+          <p className="text-sm text-gray-300 mt-1">All generated files have been sent to your browser's default download folder.</p>
+        </div>
+      )}
     </div>
   );
 };
@@ -319,12 +311,12 @@ const App: React.FC = () => {
   const [unitsByGrade, setUnitsByGrade] = useState<UnitsByGrade>({});
   const [allSlos, setAllSlos] = useState<SLO[]>([]);
   const [selectedSloUniqueIds, setSelectedSloUniqueIds] = useState<string[]>([]);
-  const [lessonPlan, setLessonPlan] = useState<LessonPlan | null>(null);
-  const [currentSloId, setCurrentSloId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isParsing, setIsParsing] = useState(true);
   const [generationProgress, setGenerationProgress] = useState<{ current: number; total: number } | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [logMessages, setLogMessages] = useState<string[]>([]);
+  const [isComplete, setIsComplete] = useState<boolean>(false);
 
   const [directoryName, setDirectoryName] = useState<string | null>(null);
   const [directoryFiles, setDirectoryFiles] = useState<File[]>([]);
@@ -409,7 +401,8 @@ const App: React.FC = () => {
 
   const generateAllLessonPlans = async () => {
     setIsLoading(true);
-    setLessonPlan(null);
+    setIsComplete(false);
+    setLogMessages(['Starting lesson plan generation...']);
     setGenerationProgress({ current: 0, total: selectedSloUniqueIds.length });
 
     const selectedSlos = allSlos.filter(slo => selectedSloUniqueIds.includes(slo.uniqueId!));
@@ -417,39 +410,50 @@ const App: React.FC = () => {
     for (let i = 0; i < selectedSlos.length; i++) {
         const slo = selectedSlos[i];
         setGenerationProgress({ current: i + 1, total: selectedSlos.length });
-        setCurrentSloId(slo.SLO_ID);
+        setLogMessages(prev => [...prev, `\nProcessing SLO: ${slo.SLO_ID}`]);
+
         try {
             const unitSlos = allSlos.filter(s => s.grade === slo.grade && s.Unit_Name === slo.Unit_Name);
             const contextPdf = contextPdfs.find(p => p.grade === slo.grade && parseInt(p.unit, 10) === parseInt(slo.Unit_Number, 10));
             
             let contextFilePart: Part | undefined;
             if (contextPdf) {
+                setLogMessages(prev => [...prev, `Found context file: ${contextPdf.name}`]);
                 contextFilePart = await fileToPart(contextPdf.file);
             } else {
-                 console.warn(`No context PDF found for SLO ${slo.SLO_ID}. Generation may be less accurate.`);
+                 const warningMsg = `No context PDF found for SLO ${slo.SLO_ID}. Generation may be less accurate.`;
+                 console.warn(warningMsg);
+                 setLogMessages(prev => [...prev, `WARN: ${warningMsg}`]);
             }
-
+            
+            setLogMessages(prev => [...prev, `Generating lesson plan content...`]);
             const plan = await generateLessonPlan(slo, unitSlos, contextFilePart);
-            if (i === 0) { // Display the first one immediately
-                setLessonPlan(plan);
-            }
+            setLogMessages(prev => [...prev, `Content received. Title: "${plan.title}"`]);
+
             // Sequentially export
+            const docxFileName = formatFileName(plan.title, slo.SLO_ID);
+            setLogMessages(prev => [...prev, `Exporting ${docxFileName}.docx...`]);
             await exportAsDocx(plan, slo.SLO_ID);
-            await new Promise(resolve => setTimeout(resolve, 500)); // Small delay between exports
+            await new Promise(resolve => setTimeout(resolve, 250));
+            
+            const pdfFileName = formatFileName(plan.title, slo.SLO_ID);
+            setLogMessages(prev => [...prev, `Exporting ${pdfFileName}.pdf...`]);
             await exportAsPdf(plan, slo.SLO_ID);
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 250));
+            
+            setLogMessages(prev => [...prev, `Successfully processed ${slo.SLO_ID}.`]);
 
         } catch (error) {
-            console.error(`Failed to generate or export lesson plan for ${slo.SLO_ID}:`, error);
-            // Optionally, show an error to the user
-            if (i === 0) {
-              setLessonPlan(null); // Clear plan on error
-            }
+            const errorMsg = `Failed for ${slo.SLO_ID}: ${error instanceof Error ? error.message : String(error)}`;
+            console.error(errorMsg);
+            setLogMessages(prev => [...prev, `ERROR: ${errorMsg}`]);
         }
     }
     
     setIsLoading(false);
     setGenerationProgress(null);
+    setIsComplete(true);
+    setLogMessages(prev => [...prev, `\nGeneration finished.`]);
   };
   
   const handleDirectorySelected = (files: FileList) => {
@@ -464,19 +468,6 @@ const App: React.FC = () => {
         setDirectoryName("Selected Folder");
       }
       setDirectoryFiles(fileArray);
-    }
-  };
-
-
-  const handleExportPdf = () => {
-    if (lessonPlan) {
-      exportAsPdf(lessonPlan, currentSloId);
-    }
-  };
-
-  const handleExportDocx = () => {
-    if (lessonPlan) {
-      exportAsDocx(lessonPlan, currentSloId);
     }
   };
 
@@ -538,13 +529,11 @@ const App: React.FC = () => {
             generationProgress={generationProgress}
             areFilesReady={areFilesReady}
           />
-          <LessonPlanDisplay 
-            lessonPlan={lessonPlan}
+          <StatusDisplay
             isLoading={isLoading}
-            initialMessage="Select one or more SLOs and click 'Generate' to create a lesson plan."
-            onExportPdf={handleExportPdf}
-            onExportDocx={handleExportDocx}
-            sloId={currentSloId}
+            isComplete={isComplete}
+            logMessages={logMessages}
+            generationProgress={generationProgress}
           />
         </div>
       </main>

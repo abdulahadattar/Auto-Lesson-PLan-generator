@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Part } from "@google/genai";
 import { Activity, LessonPlan, SLO } from '../types';
 
@@ -19,8 +18,6 @@ function parseLessonPlanText(text: string, gradeLevel: string, subject: string):
         materials: [],
         activities: [],
         assessment: '',
-        homework: '',
-        summary: '',
     };
 
     try {
@@ -39,10 +36,10 @@ function parseLessonPlanText(text: string, gradeLevel: string, subject: string):
                 .filter(Boolean);
         }
 
-        const activitiesTextMatch = text.match(/LESSON PROCEDURE & TIMINGS([\s\S]*?)(Homework Assignment:|$)/i);
+        const activitiesTextMatch = text.match(/LESSON PROCEDURE & TIMINGS([\s\S]*)/i);
         if (activitiesTextMatch) {
             const activitiesText = activitiesTextMatch[1];
-            const activityRegex = /(ACTIVATING PRIOR KNOWLEDGE|ACQUIRING NEW KNOWLEDGE|APPLYING KNOWLEDGE|ASSESSMENT: ASSESSING KNOWLEDGE)\s*\((\d+)\s*mins?\)([\s\S]*?)(?=(?:ACTIVATING PRIOR KNOWLEDGE|ACQUIRING NEW KNOWLEDGE|APPLYING KNOWLEDGE|ASSESSMENT: ASSESSING KNOWLEDGE|Homework Assignment:|$))/gi;
+            const activityRegex = /(ACTIVATING PRIOR KNOWLEDGE|ACQUIRING NEW KNOWLEDGE|APPLYING KNOWLEDGE|ASSESSMENT: ASSESSING KNOWLEDGE)\s*\((\d+)\s*mins?\)([\s\S]*?)(?=(?:ACTIVATING PRIOR KNOWLEDGE|ACQUIRING NEW KNOWLEDGE|APPLYING KNOWLEDGE|ASSESSMENT: ASSESSING KNOWLEDGE|$))/gi;
 
             let match;
             while ((match = activityRegex.exec(activitiesText)) !== null) {
@@ -58,12 +55,6 @@ function parseLessonPlanText(text: string, gradeLevel: string, subject: string):
             }
         }
         
-        const homeworkMatch = text.match(/Homework Assignment:([\s\S]*)/i);
-        if (homeworkMatch) lessonPlan.homework = homeworkMatch[1].trim() || 'None';
-        else lessonPlan.homework = 'None';
-        
-        lessonPlan.summary = `A 40-minute lesson plan for ${lessonPlan.gradeLevel} ${lessonPlan.subject} focusing on "${lessonPlan.title}". Key activities include activating prior knowledge, introducing new material, application-based practice, and a final assessment.`;
-
         if (!lessonPlan.title || lessonPlan.activities.length === 0) {
              throw new Error("Failed to parse key sections of the lesson plan.");
         }
@@ -101,18 +92,19 @@ export async function generateLessonPlan(
 **Critical Instructions:**
 1.  **Strictly Grounded:** Your primary source of information is the attached PDF document. Base the entire lesson plan ONLY on the content found within this document, guided by the provided Student Learning Outcome (SLO). Use the other SLOs from the same unit for context on where this lesson fits.
 2.  **Deconstruct Topic & Pace:** Analyze the requested SLO to identify a focused sub-topic suitable for a single 40-minute lesson. The lesson plan must be granular and specific, not covering an entire broad chapter.
-3.  **MANDATORY OUTPUT FORMAT:** The output must ONLY be the body of the lesson plan. The total duration of all activities must be exactly 40 minutes.
+3.  **MANDATORY OUTPUT FORMAT:** The output must ONLY be the body of the lesson plan. The total duration of all activities must be exactly 40 minutes. Do not add any extra text, headers, or conversational markdown. The response must start directly with "LESSON TOPIC:".
 4.  **Grade Appropriateness:** All content, activities, and assessments must be appropriate for the specified grade level: ${gradeLevelContext}.
 
 **Follow this exact structure and formatting:**
 
+LESSON TOPIC: [A concise and specific topic for a 40-minute lesson derived from the main SLO]
 
 LEARNING OBJECTIVES (SLOs): (Students will be able to: *) [The learning objective, which should be a clear restatement of the user's provided SLO.]
 
-RESOURCES:i.e
+RESOURCES:
 - [List of resources, including the relevant textbook page numbers if possible]
-- [Whiteboard and markers ]
-- [Projector to display Visuals(related to topic diagram or animation...) (optional)]
+- [Whiteboard and markers]
+- [Projector to display Visuals (related to topic diagram or animation...) (optional)]
 
 LESSON PROCEDURE & TIMINGS
 ACTIVATING PRIOR KNOWLEDGE ([duration in minutes] mins)
@@ -124,9 +116,8 @@ ACQUIRING NEW KNOWLEDGE ([duration in minutes] mins)
 APPLYING KNOWLEDGE ([duration in minutes] mins)
 [Detailed description of the activity, grounded in the PDF content]
 
-ASSESSING KNOWLEDGE ([duration in minutes] mins)
-[Detailed description of the activity. This should also contain the assessment summary, grounded in the PDF content]
-
+ASSESSMENT: ASSESSING KNOWLEDGE ([duration in minutes] mins)
+[Detailed description of the activity, grounded in the PDF content. This should include any self-assessment questions from the textbook or other reinforcement tasks previously considered as homework.]
 `;
   const contextText = unitSlos
     .filter(s => s.uniqueId !== slo.uniqueId)
@@ -145,11 +136,13 @@ Use the attached PDF as the primary reference for content, examples, and activit
   try {
     const parts: Part[] = [{ text: userPrompt }];
     if (contextFilePart) {
+        // Fix: Corrected typo in variable name from contextFilepart to contextFilePart.
         parts.unshift(contextFilePart); // Put PDF first for better context
     }
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-pro',
+      // Fix: The 'contents' property expects a Content object ({ parts: Part[] }), not an array of Content objects.
       contents: { parts: parts },
       config: {
         systemInstruction: systemInstruction,
