@@ -106,13 +106,13 @@ export async function generateLessonPlan(
 
 **Follow this exact structure and formatting:**
 
-LESSON TOPIC: [A short, descriptive title for the specific sub-topic covered in this 40-minute lesson, derived from the PDF content related to the SLO]
 
 LEARNING OBJECTIVES (SLOs): (Students will be able to: *) [The learning objective, which should be a clear restatement of the user's provided SLO.]
 
 RESOURCES:i.e
-- [List of resources, including the relevant textbook/PDF page numbers if possible]
-- [Whiteboard and markers]
+- [List of resources, including the relevant textbook page numbers if possible]
+- [Whiteboard and markers ]
+- [Projector to display Visuals(related to topic diagram or animation...) (optional)]
 
 LESSON PROCEDURE & TIMINGS
 ACTIVATING PRIOR KNOWLEDGE ([duration in minutes] mins)
