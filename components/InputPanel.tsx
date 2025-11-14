@@ -1,107 +1,87 @@
 
-import React, { useCallback } from 'react';
-import { useDropzone } from 'react-dropzone';
-import { UploadIcon } from './icons/UploadIcon';
+import React, { useRef } from 'react';
 import { FileIcon } from './icons/FileIcon';
-import { TrashIcon } from './icons/TrashIcon';
-import { ManagedFile } from '../types';
-import { CheckCircleIcon, ErrorIcon } from './icons/MiscIcons';
 
-interface InputPanelProps {
-  files: ManagedFile[];
-  onFilesAccepted: (acceptedFiles: File[]) => void;
-  removeFile: (fileToRemove: ManagedFile) => void;
+// Fix: Add React module declaration to support non-standard directory and webkitdirectory attributes.
+declare module 'react' {
+    interface InputHTMLAttributes<T> {
+      webkitdirectory?: string;
+      directory?: string;
+    }
 }
 
-const InputPanel: React.FC<InputPanelProps> = ({ files, onFilesAccepted, removeFile }) => {
+interface ContextPdfForDisplay {
+    name: string;
+    grade: string;
+    unit: string;
+}
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    const allowedTypes = [
-        'application/pdf', 
-        'text/plain',
-        'application/json',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    ];
-    const filteredFiles = acceptedFiles.filter(file => 
-      allowedTypes.includes(file.type) || file.name.endsWith('.txt') || file.name.endsWith('.json')
-    );
-    onFilesAccepted(filteredFiles);
-  }, [onFilesAccepted]);
+interface InputPanelProps {
+  onDirectorySelected: (files: FileList) => void;
+  directoryName: string | null;
+  contextPdfs: ContextPdfForDisplay[];
+}
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: {
-      'application/pdf': ['.pdf'],
-      'text/plain': ['.txt'],
-      'application/json': ['.json'],
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
-    }
-  });
+const InputPanel: React.FC<InputPanelProps> = ({ 
+    onDirectorySelected,
+    directoryName,
+    contextPdfs
+}) => {
+  const directoryInputRef = useRef<HTMLInputElement>(null);
 
-  const StatusIndicator: React.FC<{ status: ManagedFile['status'] }> = ({ status }) => {
-    switch (status) {
-      case 'ready':
-        return (
-            <div className="flex items-center gap-2">
-                <CheckCircleIcon className="w-4 h-4 text-green-500" />
-                <span className="text-xs text-green-400">Ready</span>
-            </div>
-        );
-      case 'error':
-        return (
-            <div className="flex items-center gap-2">
-                <ErrorIcon className="w-4 h-4 text-red-500" />
-                <span className="text-xs text-red-400">Error</span>
-            </div>
-        );
-      default:
-        return null;
-    }
+  const handleDirectoryChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+      if (event.target.files) {
+          onDirectorySelected(event.target.files);
+      }
   };
 
+  const handleConnectClick = () => {
+      directoryInputRef.current?.click();
+  };
 
   return (
     <div className="bg-[#1e1f22] p-0 rounded-xl flex flex-col gap-6">
       <div>
-        <div
-          {...getRootProps()}
-          className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors duration-200 ${isDragActive ? 'border-brand-primary bg-brand-primary/10' : 'border-brand-gray/50 hover:border-brand-primary/80'}`}
-        >
-          <input {...getInputProps()} />
-          <div className="flex flex-col items-center">
-            <UploadIcon className="w-10 h-10 text-brand-gray mb-3" />
-            {isDragActive ? (
-              <p className="text-brand-primary">Drop the files here...</p>
-            ) : (
-              <p className="text-brand-gray">Drag & drop files here. <span className="font-semibold text-gray-400">SLOs are parsed from .txt or .json files.</span> Other files (.pdf, .docx) provide context.</p>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {files.length > 0 && (
-        <div className="flex flex-col gap-3">
-            <h3 className="text-base font-semibold text-gray-300 border-b border-brand-gray/30 pb-2">Curriculum Documents</h3>
-            {files.map((managedFile, index) => (
-                <div key={index} className="flex items-center justify-between bg-brand-dark p-2.5 rounded-md" title={managedFile.error}>
-                <div className="flex items-center gap-3 overflow-hidden">
-                    <FileIcon className="w-5 h-5 text-brand-primary flex-shrink-0" />
-                    <div className="flex flex-col overflow-hidden">
-                        <span className="text-sm text-gray-300 truncate">{managedFile.file.name}</span>
-                        <StatusIndicator status={managedFile.status} />
+        <h3 className="text-base font-semibold text-gray-300 border-b border-brand-gray/30 pb-2 mb-3">Local Context Folder</h3>
+        <div className="p-4 bg-brand-dark rounded-lg">
+            <p className="text-sm text-brand-gray mb-3">Connect a local folder with your PDF curriculum. The app will automatically match files to SLOs by grade and unit from the filename.</p>
+            <input
+                type="file"
+                webkitdirectory="true"
+                directory="true"
+                multiple
+                ref={directoryInputRef}
+                onChange={handleDirectoryChange}
+                style={{ display: 'none' }}
+             />
+            <button
+                onClick={handleConnectClick}
+                className="w-full bg-brand-primary/80 text-white font-bold py-2 px-4 rounded-lg hover:bg-brand-primary transition-colors flex items-center justify-center gap-2"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+              {directoryName ? 'Change Folder' : 'Connect Folder'}
+            </button>
+            {directoryName && (
+                <div className="mt-4">
+                    <p className="text-xs text-gray-400 mb-2">Connected: <span className="font-mono bg-[#1e1f22] p-1 rounded">{directoryName}</span></p>
+                    <div className="mt-2 max-h-40 overflow-y-auto custom-scrollbar pr-2 space-y-1">
+                        {contextPdfs.length > 0 ? (
+                            contextPdfs.sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric: true})).map(pdf => (
+                                <div key={pdf.name} className="flex items-center gap-2 p-1.5 bg-brand-gray/10 rounded">
+                                    <FileIcon className="w-4 h-4 text-brand-primary flex-shrink-0" />
+                                    <span className="text-xs text-gray-300 truncate flex-grow" title={pdf.name}>{pdf.name}</span>
+                                    <span className="text-xs font-medium text-blue-300 bg-blue-900/50 px-1.5 py-0.5 rounded-full flex-shrink-0">{pdf.grade}</span>
+                                    <span className="text-xs font-medium text-green-300 bg-green-900/50 px-1.5 py-0.5 rounded-full flex-shrink-0">Unit {pdf.unit}</span>
+                                </div>
+                            ))
+                        ) : (
+                            <p className="text-xs text-center text-brand-gray p-4">No valid PDF files found. Ensure filenames contain 'Grade [Number]' and 'Unit [Number]'.</p>
+                        )}
                     </div>
                 </div>
-                <button
-                    onClick={() => removeFile(managedFile)}
-                    className="p-1 rounded-full hover:bg-red-500/20 text-gray-400 hover:text-red-400 transition-colors flex-shrink-0 ml-2"
-                    aria-label="Remove file"
-                >
-                    <TrashIcon className="w-4 h-4" />
-                </button>
-                </div>
-            ))}
+            )}
         </div>
-      )}
+      </div>
     </div>
   );
 };

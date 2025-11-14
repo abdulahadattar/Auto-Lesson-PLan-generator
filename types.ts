@@ -29,9 +29,3 @@ export interface SLO {
 }
 
 export type GroupedSlos = Record<string, SLO[]>;
-
-export interface ManagedFile {
-  file: File;
-  status: 'ready' | 'error';
-  error?: string;
-}

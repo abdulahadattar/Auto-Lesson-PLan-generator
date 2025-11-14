@@ -1,5 +1,5 @@
 
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Part } from "@google/genai";
 import { Activity, LessonPlan, SLO } from '../types';
 
 /**
@@ -76,7 +76,11 @@ function parseLessonPlanText(text: string, gradeLevel: string, subject: string):
 }
 
 
-export async function generateLessonPlan(slo: SLO, unitSlos: SLO[]): Promise<LessonPlan> {
+export async function generateLessonPlan(
+    slo: SLO, 
+    unitSlos: SLO[],
+    contextFilePart?: Part
+): Promise<LessonPlan> {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
   if (!process.env.API_KEY) {
@@ -92,36 +96,36 @@ export async function generateLessonPlan(slo: SLO, unitSlos: SLO[]): Promise<Les
     gradeLevelContext = `${slo.grade} (Advanced)`;
   }
   
-  const systemInstruction = `You are an expert curriculum developer for ${gradeLevelContext} Physics. Your task is to generate a concise, printable, 40-minute lesson plan based *exclusively* on the provided Student Learning Outcome (SLO) and the context of other SLOs from the same unit.
+  const systemInstruction = `You are an expert curriculum developer for ${gradeLevelContext} Physics. Your task is to generate a concise, printable, 40-minute lesson plan.
 
 **Critical Instructions:**
-1.  **Deconstruct Topic & Pace:** Your most critical task is to analyze the user's requested SLO and the provided context SLOs to identify a focused, logical sub-topic suitable for a single 40-minute lesson. The lesson plan must NEVER cover an entire chapter or a broad topic. It must be granular and specific.
-2.  **Strictly Grounded:** Base the entire lesson plan ONLY on the content of the provided SLOs. Do not use any external knowledge or information.
+1.  **Strictly Grounded:** Your primary source of information is the attached PDF document. Base the entire lesson plan ONLY on the content found within this document, guided by the provided Student Learning Outcome (SLO). Use the other SLOs from the same unit for context on where this lesson fits.
+2.  **Deconstruct Topic & Pace:** Analyze the requested SLO to identify a focused sub-topic suitable for a single 40-minute lesson. The lesson plan must be granular and specific, not covering an entire broad chapter.
 3.  **MANDATORY OUTPUT FORMAT:** The output must ONLY be the body of the lesson plan. The total duration of all activities must be exactly 40 minutes.
 4.  **Grade Appropriateness:** All content, activities, and assessments must be appropriate for the specified grade level: ${gradeLevelContext}.
 
 **Follow this exact structure and formatting:**
 
-LESSON TOPIC: [A short, descriptive title for the specific sub-topic covered in this 40-minute lesson]
+LESSON TOPIC: [A short, descriptive title for the specific sub-topic covered in this 40-minute lesson, derived from the PDF content related to the SLO]
 
 LEARNING OBJECTIVES (SLOs): (Students will be able to: *) [The learning objective, which should be a clear restatement of the user's provided SLO.]
 
 RESOURCES:i.e
+- [List of resources, including the relevant textbook/PDF page numbers if possible]
 - [Whiteboard and markers]
-- [Sindh Text book]
 
 LESSON PROCEDURE & TIMINGS
 ACTIVATING PRIOR KNOWLEDGE ([duration in minutes] mins)
-[Detailed description of the activity]
+[Detailed description of the activity, grounded in the PDF content]
 
 ACQUIRING NEW KNOWLEDGE ([duration in minutes] mins)
-[Detailed description of the activity]
+[Detailed description of the activity, grounded in the PDF content]
 
 APPLYING KNOWLEDGE ([duration in minutes] mins)
-[Detailed description of the activity]
+[Detailed description of the activity, grounded in the PDF content]
 
 ASSESSING KNOWLEDGE ([duration in minutes] mins)
-[Detailed description of the activity. This should also contain the assessment summary.]
+[Detailed description of the activity. This should also contain the assessment summary, grounded in the PDF content]
 
 `;
   const contextText = unitSlos
@@ -134,12 +138,19 @@ ASSESSING KNOWLEDGE ([duration in minutes] mins)
 
 For context, here are other SLOs from the same unit:
 ${contextText}
+
+Use the attached PDF as the primary reference for content, examples, and activities.
 `;
 
   try {
+    const parts: Part[] = [{ text: userPrompt }];
+    if (contextFilePart) {
+        parts.unshift(contextFilePart); // Put PDF first for better context
+    }
+
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: { parts: [{ text: userPrompt }] },
+      model: 'gemini-2.5-pro',
+      contents: { parts: parts },
       config: {
         systemInstruction: systemInstruction,
         temperature: 0.2,
